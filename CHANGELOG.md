@@ -1,2 +1,3 @@
+- 2026-03-02 [docs] Updated manifest/repository references to the `arodd` fork for catalog installation, help links, and release URLs.
 - 2026-03-02 [feature] Switched IMDb tags to `languageimdb_<spoken language>` (all spoken languages) and added `origincountry_<country>` tags, with full-refresh cleanup for IMDb-derived tags.
 - 2026-03-02 [feature] Added IMDb spoken-language tagging (`language_<spokenLanguage[0]>`) with automatic `foreign` tagging for non-English primary spoken language.

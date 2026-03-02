@@ -78,7 +78,7 @@ These are the possible Parental Control settings you could use for an English-on
 ## Installation
 Add this repository in Jellyfin: Plugins -> Catalog -> Add Repository:
 ```
-https://raw.githubusercontent.com/TheXaman/jellyfin-plugin-languageTags/main/manifest.json
+https://raw.githubusercontent.com/arodd/jellyfin-plugin-languageTags/main/manifest.json
 ```
 
 ## Build (only needed for development!)
