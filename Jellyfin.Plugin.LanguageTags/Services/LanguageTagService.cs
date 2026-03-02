@@ -103,6 +103,41 @@ public class LanguageTagService
     }
 
     /// <summary>
+    /// Adds a single tag if not present.
+    /// </summary>
+    /// <param name="item">The item to modify.</param>
+    /// <param name="tagName">The tag name.</param>
+    /// <returns>True when the tag was added.</returns>
+    public bool AddTagIfMissing(BaseItem item, string tagName)
+    {
+        if (item.Tags.Contains(tagName, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        item.AddTag(tagName);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a single exact tag (case-insensitive).
+    /// </summary>
+    /// <param name="item">The item to modify.</param>
+    /// <param name="tagName">The tag to remove.</param>
+    /// <returns>True when at least one tag instance was removed.</returns>
+    public bool RemoveExactTag(BaseItem item, string tagName)
+    {
+        var updatedTags = item.Tags.Where(tag => !tag.Equals(tagName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (updatedTags.Length == item.Tags.Length)
+        {
+            return false;
+        }
+
+        item.Tags = updatedTags;
+        return true;
+    }
+
+    /// <summary>
     /// Adds language tags to an item with provided prefixes and whitelist.
     /// </summary>
     /// <param name="item">The item to add tags to.</param>

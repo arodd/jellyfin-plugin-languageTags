@@ -27,6 +27,7 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
     private readonly LanguageTagService _tagService;
     private readonly LibraryQueryService _queryService;
     private readonly SubtitleExtractionService _subtitleService;
+    private readonly ImdbSpokenLanguageService _imdbSpokenLanguageService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LanguageTagsManager"/> class.
@@ -38,6 +39,7 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
     /// <param name="tagService">Instance of the language tag service.</param>
     /// <param name="queryService">Instance of the library query service.</param>
     /// <param name="subtitleService">Instance of the subtitle extraction service.</param>
+    /// <param name="imdbSpokenLanguageService">Instance of the IMDb spoken language service.</param>
     public LanguageTagsManager(
         ILibraryManager libraryManager,
         ILogger<LanguageTagsManager> logger,
@@ -45,7 +47,8 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
         LanguageConversionService conversionService,
         LanguageTagService tagService,
         LibraryQueryService queryService,
-        SubtitleExtractionService subtitleService)
+        SubtitleExtractionService subtitleService,
+        ImdbSpokenLanguageService imdbSpokenLanguageService)
     {
         _libraryManager = libraryManager;
         _logger = logger;
@@ -54,6 +57,7 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
         _tagService = tagService;
         _queryService = queryService;
         _subtitleService = subtitleService;
+        _imdbSpokenLanguageService = imdbSpokenLanguageService;
     }
 
     // ***********************************
@@ -590,6 +594,8 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
                 _tagService.RemoveLanguageTags(video, TagType.Subtitle, scanContext.AudioPrefix, scanContext.SubtitlePrefix);
             }
 
+            _tagService.RemoveExactTag(video, ImdbSpokenLanguageService.ForeignTag);
+
             shouldProcess = true;
             return (shouldProcess, existingAudioLanguagesName, existingSubtitleLanguagesName);
         }
@@ -726,6 +732,8 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
                 _logger.LogWarning("No subtitle information found for VIDEO {VideoName}", video.Name);
             }
 
+            await ApplyImdbSpokenLanguageTags(video, scanContext, cancellationToken).ConfigureAwait(false);
+
             // Save video to repository only once after all tag modifications
             await video.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
         }
@@ -814,7 +822,41 @@ public sealed class LanguageTagsManager : IHostedService, IDisposable
         {
             _tagService.RemoveLanguageTags(item, TagType.Audio, audioPrefix, subtitlePrefix);
             _tagService.RemoveLanguageTags(item, TagType.Subtitle, audioPrefix, subtitlePrefix);
+            _tagService.RemoveExactTag(item, ImdbSpokenLanguageService.ForeignTag);
             await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ApplyImdbSpokenLanguageTags(
+        Video video,
+        (string AudioPrefix, string SubtitlePrefix, List<string> Whitelist, bool DisableUndefinedTags) scanContext,
+        CancellationToken cancellationToken)
+    {
+        var imdbLanguage = await _imdbSpokenLanguageService
+            .TryGetPrimarySpokenLanguageAsync(video, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (imdbLanguage is null)
+        {
+            return;
+        }
+
+        _ = _tagService.AddLanguageTags(
+            video,
+            new List<string> { imdbLanguage.LanguageName },
+            TagType.Audio,
+            convertFromIso: false,
+            scanContext.AudioPrefix,
+            scanContext.SubtitlePrefix,
+            scanContext.Whitelist);
+
+        if (imdbLanguage.IsEnglish)
+        {
+            _tagService.RemoveExactTag(video, ImdbSpokenLanguageService.ForeignTag);
+        }
+        else
+        {
+            _tagService.AddTagIfMissing(video, ImdbSpokenLanguageService.ForeignTag);
         }
     }
 

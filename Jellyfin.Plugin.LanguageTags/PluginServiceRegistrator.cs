@@ -19,6 +19,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<LanguageTagService>();
         serviceCollection.AddSingleton<LibraryQueryService>();
         serviceCollection.AddSingleton<SubtitleExtractionService>();
+        serviceCollection.AddSingleton<ImdbSpokenLanguageService>();
 
         // Register LanguageTagsManager as both singleton and hosted service
         serviceCollection.AddSingleton<LanguageTagsManager>();

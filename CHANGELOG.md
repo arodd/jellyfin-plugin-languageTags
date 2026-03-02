@@ -1,0 +1,1 @@
+- 2026-03-02 [feature] Added IMDb spoken-language tagging (`language_<spokenLanguage[0]>`) with automatic `foreign` tagging for non-English primary spoken language.

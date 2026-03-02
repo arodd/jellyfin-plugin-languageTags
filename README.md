@@ -16,6 +16,8 @@ Please note that LanguageTags will only work well if your media files are tagged
 - Tagging & Display
   - Configurable tag prefixes for audio and subtitle tags (with validation)
   - Full language names in tags (e.g., language_German)
+  - IMDb primary spoken-language tagging (adds `language_<spokenLanguage[0]>`)
+  - Adds `foreign` tag when IMDb primary spoken language is non-English
   - Visual language selector for easier configuration
   - Tagging for non-media items (e.g., actors, studios) with toggles*
 
@@ -29,6 +31,7 @@ Please note that LanguageTags will only work well if your media files are tagged
   - 10–100x faster scanning via MediaStreams API (no FFmpeg process spawn)
   - Direct extraction of audio/subtitle languages from metadata
   - External subtitle support for .srt and .ass
+  - IMDb spoken-language lookup with in-memory caching and request throttling
 
 ## Example Usage
 Restrict content via user Parental Controls using the "Allow items with tags" rule in combination with LanguageTags:
@@ -63,6 +66,13 @@ These are the possible Parental Control settings you could use for an English-on
   - Asynchronous (default) or synchronous for low-end devices
 - Schedule
   - Configure periodic scans (default every 24h)
+
+## IMDb spoken-language tags
+- When an item has an IMDb provider ID, the plugin queries IMDb spoken languages and uses the first spoken-language entry (`spokenLanguages[0]`).
+- It adds `language_<spokenLanguage[0]>` using your configured audio prefix.
+- If `spokenLanguages[0]` is not English, it also adds the `foreign` tag.
+- On full refresh and on "Remove all language tags", the plugin also removes stale `foreign` tags before re-applying rules.
+- Existing already-tagged items may be skipped in incremental mode; run a full refresh once after upgrading to apply IMDb-based tags across existing content.
 
 ## Installation
 Add this repository in Jellyfin: Plugins -> Catalog -> Add Repository:
