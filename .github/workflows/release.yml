@@ -120,8 +120,9 @@ jobs:
       - name: Update manifest file
         run: |
           timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          repo="${GITHUB_REPOSITORY}"
           # Use VERSION (without -preview) in the zip filename so Jellyfin can read it
-          sourceUrl="https://github.com/TheXaman/jellyfin-plugin-languageTags/releases/download/v$TAG_VERSION/language-tags_$VERSION.zip"
+          sourceUrl="https://github.com/${repo}/releases/download/v$TAG_VERSION/language-tags_$VERSION.zip"
           # Use jq to safely extract changelog
           formatted_changelog=$(echo "$FORMATTED_CHANGELOG" | jq -r '.[]' | sed 's/^/- /' || echo "No changelog available")
           if [[ "${{ env.IS_PREVIEW }}" == "true" ]]; then

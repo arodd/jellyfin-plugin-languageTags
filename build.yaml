@@ -1,7 +1,7 @@
 ---
 name: "Language Tags"
 guid: "e6ee25c2-d12c-4382-a48c-66ee9c1c33cb"
-version: "0.5.2.2"
+version: "0.5.3.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "This plugin automatically adds language tags to the media."

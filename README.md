@@ -90,6 +90,11 @@ dotnet publish --configuration Release
 ```
 4. Copy the resulting output to the Jellyfin plugins folder
 
+## Maintainer Release Flow
+1. Update the `VERSION` file (for example `0.5.3.0`) and push to `main`.
+2. GitHub Actions (`.github/workflows/release.yml`) builds the plugin, creates the GitHub tag/release, and updates `manifest.json`.
+3. `manifest.json` is updated with the release artifact URL and checksum from this fork repository.
+
 ## What’s New
 
 ### v0.4.4.8
