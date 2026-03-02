@@ -138,6 +138,30 @@ public class LanguageTagService
     }
 
     /// <summary>
+    /// Returns whether an item contains at least one tag with the provided prefix.
+    /// </summary>
+    /// <param name="item">The item to inspect.</param>
+    /// <param name="prefix">The prefix to match.</param>
+    /// <returns>True when at least one tag matches the prefix.</returns>
+    public bool HasTagWithPrefix(BaseItem item, string prefix)
+    {
+        return item.Tags.Any(tag => tag.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Removes tags matching a prefix (case-insensitive).
+    /// </summary>
+    /// <param name="item">The item to modify.</param>
+    /// <param name="prefix">Tag prefix to remove.</param>
+    /// <returns>Number of removed tags.</returns>
+    public int RemoveTagsWithPrefix(BaseItem item, string prefix)
+    {
+        var originalCount = item.Tags.Length;
+        item.Tags = item.Tags.Where(tag => !tag.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return originalCount - item.Tags.Length;
+    }
+
+    /// <summary>
     /// Adds language tags to an item with provided prefixes and whitelist.
     /// </summary>
     /// <param name="item">The item to add tags to.</param>

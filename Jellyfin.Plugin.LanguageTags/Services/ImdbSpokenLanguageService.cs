@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -13,10 +14,20 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.LanguageTags.Services;
 
 /// <summary>
-/// Resolves primary spoken language from IMDb metadata.
+/// Resolves spoken-language and country-of-origin data from IMDb metadata.
 /// </summary>
 public sealed class ImdbSpokenLanguageService : IDisposable
 {
+    /// <summary>
+    /// Prefix for IMDb spoken-language tags.
+    /// </summary>
+    public const string ImdbLanguageTagPrefix = "languageimdb_";
+
+    /// <summary>
+    /// Prefix for IMDb origin-country tags.
+    /// </summary>
+    public const string OriginCountryTagPrefix = "origincountry_";
+
     /// <summary>
     /// Tag added when IMDb primary spoken language is non-English.
     /// </summary>
@@ -38,12 +49,12 @@ public sealed class ImdbSpokenLanguageService : IDisposable
     }
 
     /// <summary>
-    /// Gets IMDb primary spoken language for a media item.
+    /// Gets IMDb spoken-language and country-of-origin metadata for a media item.
     /// </summary>
     /// <param name="item">The media item.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Primary spoken language result when available; otherwise null.</returns>
-    public async Task<ImdbSpokenLanguageResult?> TryGetPrimarySpokenLanguageAsync(BaseItem item, CancellationToken cancellationToken)
+    /// <returns>IMDb metadata result when available; otherwise null.</returns>
+    public async Task<ImdbSpokenLanguageResult?> TryGetImdbMetadataAsync(BaseItem item, CancellationToken cancellationToken)
     {
         if (item is null)
         {
@@ -70,7 +81,7 @@ public sealed class ImdbSpokenLanguageService : IDisposable
         {
             await _requestLimiter.WaitAsync(cancellationToken).ConfigureAwait(false);
             hasLock = true;
-            resolvedResult = await FetchPrimarySpokenLanguageAsync(normalizedImdbId, cancellationToken).ConfigureAwait(false);
+            resolvedResult = await FetchImdbMetadataAsync(normalizedImdbId, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -78,7 +89,7 @@ public sealed class ImdbSpokenLanguageService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Unable to resolve IMDb spoken language for {ImdbId}", normalizedImdbId);
+            _logger.LogWarning(ex, "Unable to resolve IMDb metadata for {ImdbId}", normalizedImdbId);
         }
         finally
         {
@@ -117,11 +128,11 @@ public sealed class ImdbSpokenLanguageService : IDisposable
             && imdbId.Length >= 3;
     }
 
-    private async Task<ImdbSpokenLanguageResult?> FetchPrimarySpokenLanguageAsync(string imdbId, CancellationToken cancellationToken)
+    private async Task<ImdbSpokenLanguageResult?> FetchImdbMetadataAsync(string imdbId, CancellationToken cancellationToken)
     {
         var payload = new
         {
-            query = "query($id: ID!) { title(id: $id) { spokenLanguages { spokenLanguages { id text } } } }",
+            query = "query($id: ID!) { title(id: $id) { spokenLanguages { spokenLanguages { id text } } countriesOfOrigin { countries { id text } } } }",
             variables = new { id = imdbId }
         };
 
@@ -143,25 +154,36 @@ public sealed class ImdbSpokenLanguageService : IDisposable
             .ConfigureAwait(false);
 
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (!TryGetPrimarySpokenLanguage(document, out var languageId, out var languageName))
+        if (!TryGetImdbLanguageAndCountryData(
+                document,
+                out var primaryLanguageId,
+                out var primaryLanguageName,
+                out var spokenLanguages,
+                out var originCountries))
         {
             return null;
         }
 
-        var normalizedName = NormalizeLanguageName(languageName);
-        if (string.IsNullOrWhiteSpace(normalizedName))
+        if (spokenLanguages.Count == 0 && originCountries.Count == 0)
         {
             return null;
         }
 
-        var isEnglish = IsEnglishLanguage(languageId, normalizedName);
-        return new ImdbSpokenLanguageResult(normalizedName, isEnglish);
+        var isEnglish = IsEnglishLanguage(primaryLanguageId, primaryLanguageName ?? string.Empty);
+        return new ImdbSpokenLanguageResult(primaryLanguageName, isEnglish, spokenLanguages, originCountries);
     }
 
-    private static bool TryGetPrimarySpokenLanguage(JsonDocument document, out string languageId, out string languageName)
+    private static bool TryGetImdbLanguageAndCountryData(
+        JsonDocument document,
+        out string primaryLanguageId,
+        out string? primaryLanguageName,
+        out IReadOnlyList<string> spokenLanguages,
+        out IReadOnlyList<string> originCountries)
     {
-        languageId = string.Empty;
-        languageName = string.Empty;
+        primaryLanguageId = string.Empty;
+        primaryLanguageName = null;
+        spokenLanguages = Array.Empty<string>();
+        originCountries = Array.Empty<string>();
 
         var root = document.RootElement;
         if (!root.TryGetProperty("data", out var dataElement))
@@ -174,32 +196,12 @@ public sealed class ImdbSpokenLanguageService : IDisposable
             return false;
         }
 
-        if (!titleElement.TryGetProperty("spokenLanguages", out var spokenLanguagesElement))
-        {
-            return false;
-        }
+        var spoken = ParseSpokenLanguages(titleElement, out primaryLanguageId, out primaryLanguageName);
+        var countries = ParseOriginCountries(titleElement);
+        spokenLanguages = spoken;
+        originCountries = countries;
 
-        if (!spokenLanguagesElement.TryGetProperty("spokenLanguages", out var entriesElement)
-            || entriesElement.ValueKind != JsonValueKind.Array
-            || entriesElement.GetArrayLength() == 0)
-        {
-            return false;
-        }
-
-        var firstEntry = entriesElement[0];
-        if (!firstEntry.TryGetProperty("text", out var textElement))
-        {
-            return false;
-        }
-
-        languageName = textElement.GetString() ?? string.Empty;
-
-        if (firstEntry.TryGetProperty("id", out var idElement))
-        {
-            languageId = idElement.GetString() ?? string.Empty;
-        }
-
-        return !string.IsNullOrWhiteSpace(languageName);
+        return spoken.Count > 0 || countries.Count > 0;
     }
 
     private static string NormalizeLanguageName(string languageName)
@@ -212,6 +214,110 @@ public sealed class ImdbSpokenLanguageService : IDisposable
         }
 
         return normalized;
+    }
+
+    private static string NormalizeCountryName(string countryName)
+    {
+        return countryName.Trim();
+    }
+
+    private static List<string> ParseSpokenLanguages(
+        JsonElement titleElement,
+        out string primaryLanguageId,
+        out string? primaryLanguageName)
+    {
+        primaryLanguageId = string.Empty;
+        primaryLanguageName = null;
+        var results = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!titleElement.TryGetProperty("spokenLanguages", out var spokenLanguagesElement))
+        {
+            return results;
+        }
+
+        if (!spokenLanguagesElement.TryGetProperty("spokenLanguages", out var entriesElement)
+            || entriesElement.ValueKind != JsonValueKind.Array
+            || entriesElement.GetArrayLength() == 0)
+        {
+            return results;
+        }
+
+        var primaryCaptured = false;
+        foreach (var entry in entriesElement.EnumerateArray())
+        {
+            var textValue = entry.TryGetProperty("text", out var textElement)
+                ? textElement.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(textValue))
+            {
+                continue;
+            }
+
+            var normalizedLanguageName = NormalizeLanguageName(textValue);
+            if (string.IsNullOrWhiteSpace(normalizedLanguageName))
+            {
+                continue;
+            }
+
+            if (!primaryCaptured)
+            {
+                primaryCaptured = true;
+                primaryLanguageName = normalizedLanguageName;
+                primaryLanguageId = entry.TryGetProperty("id", out var idElement)
+                    ? idElement.GetString() ?? string.Empty
+                    : string.Empty;
+            }
+
+            if (seen.Add(normalizedLanguageName))
+            {
+                results.Add(normalizedLanguageName);
+            }
+        }
+
+        return results;
+    }
+
+    private static List<string> ParseOriginCountries(JsonElement titleElement)
+    {
+        var results = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!titleElement.TryGetProperty("countriesOfOrigin", out var countriesOfOriginElement))
+        {
+            return results;
+        }
+
+        if (!countriesOfOriginElement.TryGetProperty("countries", out var countriesElement)
+            || countriesElement.ValueKind != JsonValueKind.Array
+            || countriesElement.GetArrayLength() == 0)
+        {
+            return results;
+        }
+
+        foreach (var countryEntry in countriesElement.EnumerateArray())
+        {
+            var textValue = countryEntry.TryGetProperty("text", out var textElement)
+                ? textElement.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(textValue))
+            {
+                continue;
+            }
+
+            var normalizedCountryName = NormalizeCountryName(textValue);
+            if (string.IsNullOrWhiteSpace(normalizedCountryName))
+            {
+                continue;
+            }
+
+            if (seen.Add(normalizedCountryName))
+            {
+                results.Add(normalizedCountryName);
+            }
+        }
+
+        return results;
     }
 
     private static bool IsEnglishLanguage(string languageId, string languageName)
